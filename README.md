@@ -2,10 +2,9 @@
 
 1. [Cluster APIs](#cluster-apis)
 2. [Index and Document APIs](#index-and-document-apis)
-   * [Create an index](###create-an-index)
-   * [Insert a document](###insert-a-document)
-   * [_create endpoint](###_create-endpoint)
 3. [Search and Aggregation APIs](#search-and-aggregation-apis)
+4. [Full Text Query](#full-text-query)
+5. [Aggregations](#aggregations-apis)
 
 ---
 
