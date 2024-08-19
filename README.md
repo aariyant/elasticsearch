@@ -3656,3 +3656,572 @@ Expected response from elasticsearch :
   }
 }
 ```
+
+
+# Mapping
+## Indexing a Document
+The following request will index the following document.  
+
+Syntax: 
+```
+POST {index-name}/_doc
+{
+  "field": "value"
+}
+```
+Example: 
+```
+POST temp_index/_doc
+{
+  "name": "Pineapple",
+  "botanical_name": "Ananas comosus",
+  "produce_type": "Fruit",
+  "country_of_origin": "New Zealand",
+  "date_purchased": "2020-06-02T12:15:35",
+  "quantity": 200,
+  "unit_price": 3.11,
+  "description": "a large juicy tropical fruit consisting of aromatic edible yellow flesh surrounded by a tough segmented skin and topped with a tuft of stiff leaves.These pineapples are sourced from New Zealand.",
+  "vendor_details": {
+    "vendor": "Tropical Fruit Growers of New Zealand",
+    "main_contact": "Hugh Rose",
+    "vendor_location": "Whangarei, New Zealand",
+    "preferred_vendor": true
+  }
+}
+```
+
+Expected response from elasticsearch : 
+
+Elasticsearch will confirm that this document has been successfully indexed into the temp_index. 
+```json
+{
+  "_index" : "temp_index",
+  "_type" : "_doc",
+  "_id" : "qKzoapEBdNf0rVGjiK8W",
+  "_version" : 1,
+  "result" : "created",
+  "_shards" : {
+    "total" : 2,
+    "successful" : 1,
+    "failed" : 0
+  },
+  "_seq_no" : 0,
+  "_primary_term" : 1
+}
+```
+
+## Mapping Explained
+Mapping determines how a document and its fields are indexed and stored by defining the type of each field.
+
+```shell
+GET temp_index/_mapping
+```
+
+```json
+#! Elasticsearch built-in security features are not enabled. Without authentication, your cluster could be accessible to anyone. See https://www.elastic.co/guide/en/elasticsearch/reference/7.17/security-minimal-setup.html to enable security.
+{
+  "temp_index" : {
+    "mappings" : {
+      "properties" : {
+        "quantity" : { <<-- Field name
+          "type" : "long" <<-- Field type
+        },
+        "unit_price" : { <<-- Field name
+          "type" : "float" <<-- Field type
+        },
+        "vendor_details" : {
+          "properties" : {
+            "main_contact" : {
+              "type" : "text",
+              "fields" : {
+                "keyword" : {
+                  "type" : "keyword",
+                  "ignore_above" : 256
+                }
+              }
+            },
+            "preferred_vendor" : {
+              "type" : "boolean"
+            },
+            "vendor" : {
+              "type" : "text",
+              "fields" : {
+                "keyword" : {
+                  "type" : "keyword",
+                  "ignore_above" : 256
+                }
+              }
+            },
+            "vendor_location" : {
+              "type" : "text",
+              "fields" : {
+                "keyword" : {
+                  "type" : "keyword",
+                  "ignore_above" : 256
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+It contains a list of the names and types of fields in an index. Depending on its type, each field is indexed and stored differently in Elasticsearch.
+
+### Dynamic Mapping
+When a user does not define mapping in advance, Elasticsearch creates or updates the mapping as needed by default. This is known as `dynamic mapping`. 
+
+With `dynamic mapping`, Elasticsearch looks at each field and tries to infer the data type from the field content. Then, it assigns a type to each field and creates a list of field names and types known as mapping.  
+
+Depending on the assigned field type, each field is indexed and primed for different types of requests(full text search, aggregations, sorting). This is why mapping plays an important role in how Elasticsearch stores and searches for data. 
+
+For the list of all field types, click [here](https://www.elastic.co/guide/en/elasticsearch/reference/current/mapping-types.html)!
+
+### Indexing Strings 
+There are two kinds of string field types:
+1. Text
+2. Keyword
+
+By default, every string gets mapped twice as a text field and as a keyword multi-field. Each field type is primed for different types of requests. 
+
+`Text` field type is designed for full-text searches. 
+
+`Keyword` field type is designed for exact searches, aggregations, and sorting.
+
+You can customize your mapping by assigning the field type as either text or keyword or both! 
+
+#### Text Field Type
+##### Text Analysis
+Ever notice that when you search in Elasticsearch, it is not case sensitive or punctuation does not seem to matter? This is because `text analysis` occurs when your fields are indexed. 
+
+When indexing the text "These pineapples are sourced from New Zealand" in elasticsearch, the text goes through a process called tokenization. Tokenization breaks down the text into individual tokens or terms. By default, Elasticsearch uses the standard tokenizer, which splits the text on whitespace and punctuation
+
+Example, we put some doc with id `1` into some index with this value "These pineapples are sourced from New Zealand" :
+
+```shell
+"these"       – This is the first token.
+"pineapples"  – This is the second token.
+"are"         – This is the third token.
+"sourced"     – This is the fourth token.
+"from"        – This is the fifth token.
+"new"         – This is the sixth token.
+"zealand"     – This is the seventh token.
+```
+
+So, the tokens for the given text would be: ["These", "pineapples", "are", "sourced", "from", "New", "Zealand"].
+
+__Inverted Index__
+
+Once the string is analyzed, the individual tokens are stored in a sorted list known as the `inverted index`. An inverted index stores a mapping from terms to their occurrences in documents
+
+|Term          | Document IDs |
+|--------------|------------ |
+|these         | [1] |
+|pineapples    | [1] |
+|are           | [1] |
+|sourced       | [1] |
+|from          | [1] |
+|new           | [1] |
+|zealand       | [1] |
+
+The same process occurs every time you index a new document.
+
+Example, we put new doc "These pineapples are sourced from Capadocia" into some index sith id `2`
+
+|Term          | Document IDs |
+|--------------|------------ |
+|these         | [1][2] |
+|capadocia     | [2] |
+|pineapples    | [1][2] |
+|are           | [1][2] |
+|sourced       | [1][2] |
+|from          | [1][2] |
+|new           | [1] |
+|zealand       | [1] |
+
+> __NOTE:__
+> - Text field type is optimal for full text search
+> - By default, string get mapped twice as text and keyword
+
+Text used for full text search :
+|Term          | Document IDs |
+|--------------|------------ |
+|these         | [1][2] |
+|capadocia     | [2] |
+|pineapples    | [1][2] |
+
+
+Keyword used for aggregations, sorting, exact searches :
+|Document IDs | Document Values |
+|-------------|-----------------|
+|[1]          | New Zealand     |
+|[2]          | Capadocia       |
+
+
+#### Keyword Field Type
+`Keyword` field type is used for aggregations, sorting, and exact searches. These actions look up the document ID to find the values it has in its fields. 
+
+`Keyword` field is suited to perform these actions because it uses a data structure called `doc values` to store data. 
+
+For each document, the document id along with the field value(original string) are added to the table. This data structure(`doc values`) is designed for actions that require looking up the document ID to find the values it has in its fields.
+
+|Document IDs | Document Values |
+|-------------|-----------------|
+|[1]          | New Zealand     |
+|[2]          | Capadocia       |
+
+When Elasticsearch dynamically creates a mapping for you, it does not know what you want to use a string for so it maps all strings to both field types. 
+
+In cases where you do not need both field types, the default setting is wasteful. Since both field types require creating either an inverted index or doc values, creating both field types for unnecessary fields will slow down indexing and take up more disk space.
+
+This is why we define our own mapping as it helps us store and search data more efficiently.
+
+### Defining your own mapping
+__Rules__
+1. If you do not define a mapping ahead of time, Elasticsearch dynamically creates the mapping for you.
+2. If you do decide to define your own mapping, you can do so at index creation.
+3. ONE mapping is defined per index. Once the index has been created, we can only add *new* fields to a mapping. We CANNOT change the mapping of an *existing* field. 
+4. If you must change the type of an existing field, you must create a new index with the desired mapping, then reindex all documents into the new index. 
+
+__Step 1: Index a sample document into a test index.__
+
+The sample document must contain the fields that you want to define. These fields must also contain values that map closely to the field types you want. 
+
+Syntax:
+```http
+POST {index-name}/_doc
+{
+  "field": "value"
+}
+```
+
+Example:
+```shell
+POST test_index/_doc
+{
+  "name": "Pineapple",
+  "botanical_name": "Ananas comosus",
+  "produce_type": "Fruit",
+  "country_of_origin": "New Zealand",
+  "date_purchased": "2020-06-02T12:15:35",
+  "quantity": 200,
+  "unit_price": 3.11,
+  "description": "a large juicy tropical fruit consisting of aromatic edible yellow flesh surrounded by a tough segmented skin and topped with a tuft of stiff leaves.These pineapples are sourced from New Zealand.",
+  "vendor_details": {
+    "vendor": "Tropical Fruit Growers of New Zealand",
+    "main_contact": "Hugh Rose",
+    "vendor_location": "Whangarei, New Zealand",
+    "preferred_vendor": true
+  }
+}
+```
+
+Expected response from elasticsearch :
+```json
+{
+  "_index" : "test_index",
+  "_type" : "_doc",
+  "_id" : "qaxga5EBdNf0rVGj3q9E",
+  "_version" : 1,
+  "result" : "created",
+  "_shards" : {
+    "total" : 2,
+    "successful" : 1,
+    "failed" : 0
+  },
+  "_seq_no" : 0,
+  "_primary_term" : 1
+}
+```
+
+__Step 2: View the dynamic mapping__ 
+
+Syntax:
+```http
+GET {index-name}/_mapping
+```
+
+Example:
+```shell
+GET test_index/_mapping
+```
+
+Expected response from elasticsearch :
+Elasticsearch will display the mapping it has created. It lists the fields in an alphabetical order. This document is identical to the one we indexed into the temp_index.
+
+```json
+{
+  "test_index" : {
+    "mappings" : {
+      "properties" : {
+        "botanical_name" : {
+          "type" : "text",
+          "fields" : {
+            "keyword" : {
+              "type" : "keyword",
+              "ignore_above" : 256
+            }
+          }
+        },
+        "country_of_origin" : {
+          "type" : "text",
+          "fields" : {
+            "keyword" : {
+              "type" : "keyword",
+              "ignore_above" : 256
+            }
+          }
+        },
+        "date_purchased" : {
+          "type" : "date"
+        },
+        ...
+      }
+    }
+  }
+}
+```
+
+__Step 3: Edit the mapping__
+
+Copy and paste the mapping from step 2 into the Kibana console. From the pasted results, remove the "test_index" along with its opening and closing brackets. Then, edit the mapping to satisfy the requirements outlined in the figure below.
+
+The optimized mapping should look like the following: 
+```json
+{
+  "mappings": {
+    "properties": {
+      "botanical_name": {
+        "enabled": false
+      },
+      "country_of_origin": {
+        "type": "text",
+        "fields": {
+          "keyword": {
+            "type": "keyword"
+          }
+        }
+      },
+      "date_purchased": {
+        "type": "date"
+      },
+      "description": {
+        "type": "text"
+      },
+      "name": {
+        "type": "text"
+      },
+      "produce_type": {
+        "type": "keyword"
+      },
+      "quantity": {
+        "type": "long"
+      },
+      "unit_price": {
+        "type": "float"
+      },
+      "vendor_details": {
+        "enabled": false
+      }
+    }
+  }
+}
+```
+
+__Step 4: Create a new index with the optimized mapping from step 3.__ 
+
+Syntax:
+```
+PUT {index-name}
+{
+  copy and paste your edited mapping here
+}
+```
+
+Example: 
+```shell
+PUT produce_index
+{
+  "mappings": {
+    "properties": {
+      "botanical_name": {
+        "enabled": false
+      },
+      "country_of_origin": {
+        "type": "text",
+        "fields": {
+          "keyword": {
+            "type": "keyword"
+          }
+        }
+      },
+      "date_purchased": {
+        "type": "date"
+      },
+      "description": {
+        "type": "text"
+      },
+      "name": {
+        "type": "text"
+      },
+      "produce_type": {
+        "type": "keyword"
+      },
+      "quantity": {
+        "type": "long"
+      },
+      "unit_price": {
+        "type": "float"
+      },
+      "vendor_details": {
+        "enabled": false
+      }
+    }
+  }
+}
+```
+
+Expected response from elasticsearch :
+Elasticsearch creates a produce_index with the customized mapping we defined
+```json
+{
+  "acknowledged" : true,
+  "shards_acknowledged" : true,
+  "index" : "produce_index"
+}
+```
+
+__Step 5: Check the mapping of the new index to make sure the all the fields have been mapped correctly__
+Syntax:
+```
+GET {index-name}/_mapping
+```
+
+Example:
+```
+GET produce_index/_mapping
+```
+
+Compared to the dynamic mapping, our optimized mapping looks more simple and concise! The current mapping satisfies the requirements that are marked with green check marks
+
+__Step 6: Index your dataset into the new index__
+
+For simplicity's sake, we will index two documents. 
+
+*Index the first document*
+
+```shell
+POST produce_index/_doc
+{
+  "name": "Pineapple",
+  "botanical_name": "Ananas comosus",
+  "produce_type": "Fruit",
+  "country_of_origin": "New Zealand",
+  "date_purchased": "2020-06-02T12:15:35",
+  "quantity": 200,
+  "unit_price": 3.11,
+  "description": "a large juicy tropical fruit consisting of aromatic edible yellow flesh surrounded by a tough segmented skin and topped with a tuft of stiff leaves.These pineapples are sourced from New Zealand.",
+  "vendor_details": {
+    "vendor": "Tropical Fruit Growers of New Zealand",
+    "main_contact": "Hugh Rose",
+    "vendor_location": "Whangarei, New Zealand",
+    "preferred_vendor": true
+  }
+}
+```
+
+*Index the second document*
+
+The second document has almost identical fields as the first document except that it has an extra field called "organic" set to true!
+
+```shell
+POST produce_index/_doc
+{
+  "name": "Mango",
+  "botanical_name": "Harum Manis",
+  "produce_type": "Fruit",
+  "country_of_origin": "Indonesia",
+  "organic": true,
+  "date_purchased": "2020-05-02T07:15:35",
+  "quantity": 500,
+  "unit_price": 1.5,
+  "description": "Mango Arumanis or Harum Manis is originated from East Java. Arumanis means harum dan manis or fragrant and sweet just like its taste. The ripe Mango Arumanis has dark green skin coated with thin grayish natural wax. The flesh is deep yellow, thick, and soft with little to no fiber. Mango Arumanis is best eaten when ripe.",
+  "vendor_details": {
+    "vendor": "Ayra Shezan Trading",
+    "main_contact": "Suharto",
+    "vendor_location": "Binjai, Indonesia",
+    "preferred_vendor": true
+  }
+}
+```
+
+```shell
+GET produce_index/_mapping
+```
+
+### Change Mapping Field
+__STEP 1: Create a new index(produce_v2) with the latest mapping.__
+We removed the "enabled" parameter from the field "botanical_name" and changed its type to "text".
+
+Example:
+```shell
+PUT produce_v2
+{
+  "mappings": {
+    "properties": {
+      "botanical_name": {
+        "type": "text"
+      },
+      "country_of_origin": {
+        "type": "text",
+        "fields": {
+          "keyword": {
+            "type": "keyword",
+            "ignore_above": 256
+          }
+        }
+      },
+      "date_purchased": {
+        "type": "date"
+      },
+      "description": {
+        "type": "text"
+      },
+      "name": {
+        "type": "text"
+      },
+      "organic": {
+        "type": "boolean"
+      },
+      "produce_type": {
+        "type": "keyword"
+      },
+      "quantity": {
+        "type": "long"
+      },
+      "unit_price": {
+        "type": "float"
+      },
+      "vendor_details": {
+        "type": "object",
+        "enabled": false
+      }
+    }
+  }
+}
+```
+
+__STEP 2: Reindex the data from the original index(produce_index) to the one you just created(produce_v2).__
+```
+POST _reindex
+{
+  "source": {
+    "index": "produce_index"
+  },
+  "dest": {
+    "index": "produce_v2"
+  }
+}
+```
